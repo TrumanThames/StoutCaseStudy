@@ -1,0 +1,36 @@
+
+
+<html>
+  <head>
+    <title>$title</title>
+  </head>
+  <body class="index">
+    <div id="header">
+      <h1>$title</h1>
+    </div>
+
+    <p>Welcome!</p>
+    <div id="option1" class="group">asdf</div>
+    <div id="option2" class="group">kljh</div>
+    <div id="option3" class="group">zxcv</div>
+    <div id="option4" class="group">qwerty</div>
+    <select onchange="document.getElementById('preview').src = this.value">
+      <option>Choose a Variable to Plot</option>
+		{% for hist in histograms %}
+      <option value="{{hist}}">{{basenm(hist)}}</option>
+        {% endfor %}
+    </select>
+
+    <img id="preview" height="500px" align="absbottom"/>
+    <div id="footer">
+      <hr />
+      <p class="legalese"> 2021 Truman Thames {{cwd}}</p>
+    </div>
+  <script>
+    function myFunction() {
+      var x = document.getElementById("mySelect").value;
+      document.getElementById("demo").innerHTML = "You selected: " + x;
+    }
+  </script>
+  </body>
+</html>

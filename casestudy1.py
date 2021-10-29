@@ -8,11 +8,17 @@ from sklearn.metrics import r2_score
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression, SGDRegressor
 from sklearn.feature_selection import VarianceThreshold
-import matplotlib as plt
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.ticker import EngFormatter
 import jinja2
 import seaborn as sns
 import time
 import random
+import os
+import subprocess
+
+matplotlib.use('Agg')
 
 pd.options.display.width = 170
 pd.options.display.max_colwidth = 75
@@ -110,7 +116,39 @@ def process_dataframe(df):
     return df_processed
 
 
-    # num_accounts_120d_past_due, probably fill the NAs with zeros, or just omit that column, it seems minimally useful
+    # num_accounts_120d_past_due, probably fill the NAs with zeros, or just omit that column,
+    # it seems minimally useful
+
+# Stop it from displaying all the dang graphs when I just want to save files
+
+
+xaxis_labels = {'emp_length': 'Years Employed in current Position (caps at 10)',
+                }
+
+def make_numeric_histograms(df: pd.DataFrame):
+    numeric_keys = df.select_dtypes(include='number').keys()
+    colors = ['green', 'blue', 'red', 'purple', 'orange', 'grey',
+              'lime', 'turquoise', 'steelblue', 'olive', 'tomato', 'salmon',
+              'palegreen', 'chartreuse', 'gold', 'rebeccapurple', 'hotpink',
+              'teal', 'blueviolet']
+    print(numeric_keys)
+    for i in range(len(numeric_keys)):
+        plt.clf()
+        print(numeric_keys[i])
+        num_vals = df.loc[:, numeric_keys[i]].nunique()
+        print(num_vals)
+        n, bins, patches = plt.hist(df.loc[:, numeric_keys[i]], edgecolor='black', bins=min(num_vals, 100), density=True, color=colors[i%len(colors)])
+        plt.title(numeric_keys[i])
+        plt.ylabel('Relative Frequency')
+        ax = plt.gca()
+        ax.xaxis.set_major_formatter(EngFormatter())
+        ax.axes.yaxis.set_ticklabels([])
+        if numeric_keys[i] in xaxis_labels:
+            plt.xlabel(xaxis_labels[numeric_keys[i]])
+        filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'histograms', str(numeric_keys[i]) + '.jpg')
+        plt.savefig(filename, dpi=1000, )
+        plt.clf()
+    return
 
 
 processed_data = process_dataframe(df)
@@ -124,11 +162,67 @@ x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=None, train_si
 
 corr0 = df.corr()
 
-#corr0.style.background_gradient(cmap='coolwarm').set_precision(2)
+"""
+Data Visualizations - Correlation heatmap matrix
 
-#sns.heatmap(corr0,
-#            xticklabels=corr0.columns.values,
-#            yticklabels=corr0.columns.values)
+
+"""
+
+
+def add_margin(ax, xlf=0.05, xrt=0.05, yup=0.05, ydn=0.05):
+    # This will, by default, add 5% to the x and y margins. You
+    # can customise this using the x and y arguments when you call it.
+
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    xmarginlf = (xlim[1] - xlim[0]) * xlf
+    xmarginrt = (xlim[1] - xlim[0]) * xrt
+
+    ymarginup = (ylim[1] - ylim[0]) * yup
+    ymargindn = (ylim[1] - ylim[0]) * ydn
+
+    ax.set_xlim(xlim[0]-xmarginlf, xlim[1]+xmarginrt)
+    ax.set_ylim(ylim[0]-ymargindn, ylim[1]+ymarginup)
+
+
+def make_corr_heatmap(df, cmap='coolwarm'):
+    corr0 = df.corr()
+
+    #corr0.style.background_gradient(cmap='coolwarm').set_precision(2)
+    plt.clf()
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    heatmap = sns.heatmap(corr0, square=True, vmin=-1.0, vmax=1.0,
+                xticklabels=corr0.columns.values, cmap=cmap,
+                yticklabels=corr0.columns.values)
+    plt.setp(ax.get_xticklabels(), rotation=45,
+             rotation_mode="anchor", ha='right')
+    ax.set_title('Correlation Matrix Heatmap')
+    heatmap.tick_params(axis='x', labelsize=6, pad=0.5)
+    heatmap.tick_params(axis='y', labelsize=6)
+    heatmap.figure.savefig("correlation_heatmap_"+cmap+".png", dpi=1000)
+    plt.close(heatmap.figure)
+
+
+def make_scatterplot(df, key1, key2):
+    x = df.loc[:, key1]
+    y = df.loc[:, key2]
+    plt.clf()
+    fig, ax = plt.subplots()
+    plt.scatter(x, y, edgecolors='black', linewidth=0.5, marker='^', c='blue')
+    plt.xlabel(key1)
+    plt.ylabel(key2)
+    ax.yaxis.set_major_formatter(EngFormatter())
+    ax.xaxis.set_major_formatter(EngFormatter())
+    filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'scatterplots', key1+"_vs_"+key2+'.png')
+    plt.savefig(filename, dpi=1000)
+    plt.close(fig)
+
+
+# Plotting subgrade risk rate adjustment, versus the final interest rate (very strong correlation)
+
+
 
 #mlp = make_pipeline(StandardScaler(),
 #                    MLPRegressor(activation='relu', random_state=1337, alpha=1.5e-3,
