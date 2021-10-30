@@ -18,7 +18,7 @@ import random
 import os
 import subprocess
 
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 
 pd.options.display.width = 170
 pd.options.display.max_colwidth = 75
@@ -44,7 +44,9 @@ sub_grade_risk_rate_adj_table = {'A1': 3.41,'A2': 3.97,'A3': 4.51,'A4': 5.14,'A5
                                  'G1':25.74,'G2':25.79,'G3':25.84,'G4':25.89,'G5':25.94}
 
 
-def process_dataframe(df):
+def process_dataframe(df, exclude_sub_grade_table=False):
+    # Quite a bit of effort went into deciding how I wanted to process some of the missing data especially,
+    # but also the non-numeric data, which is how I ended up finding th e subgrade rates.
     df_dummies = pd.get_dummies(df.loc[:, ['state', 'homeownership', 'verified_income',
                                 'verification_income_joint', 'loan_purpose', 'application_type', 'grade',
                                 'sub_grade', 'issue_month', 'loan_status', 'initial_listing_status',
@@ -145,20 +147,59 @@ def make_numeric_histograms(df: pd.DataFrame):
         ax.axes.yaxis.set_ticklabels([])
         if numeric_keys[i] in xaxis_labels:
             plt.xlabel(xaxis_labels[numeric_keys[i]])
-        filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'histograms', str(numeric_keys[i]) + '.jpg')
+        filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'histograms', str(numeric_keys[i]) + '__histogram.jpg')
         plt.savefig(filename, dpi=1000, )
         plt.clf()
     return
 
 
-processed_data = process_dataframe(df)
+colors = ['green', 'blue', 'red', 'purple', 'orange', 'grey',
+              'lime', 'turquoise', 'steelblue', 'olive', 'tomato', 'salmon',
+              'palegreen', 'chartreuse', 'gold', 'rebeccapurple', 'hotpink',
+              'teal', 'blueviolet']
+
+
+processed_data = process_dataframe(df, exclude_sub_grade_table=True)
+# At this point, I've processed the data, but there is an enourmous amount of,
+# uncorrelated and
 
 y = processed_data.loc[:, 'interest_rate']
 x = processed_data.loc[:, processed_data.columns != 'interest_rate']
 
+x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=None, train_size=None)
+
+cor = processed_data.corr()['interest_rate']
+keys = cor.keys()
+core = [(keys[i], cor[i]) for i in range(len(cor))]
+core.sort(key=lambda x: abs(x[1]))
+corsortedkeys= [el[0] for el in core]
+
+xtrn_pruned = x_train.drop(corsortedkeys[:80], axis=1)
+xval_pruned = x_val.drop(corsortedkeys[:80], axis=1)
+
+
+
+
+
+def check_keys_linreg(n=1):
+    l = len(corsortedkeys)
+    for i in range(n):
+        #print(corsortedkeys[])
+        xtrn = x_train.drop(corsortedkeys[:i], axis=1)
+        xvl = x_val.drop(corsortedkeys[:i], axis=1)
+        linregr = make_pipeline(StandardScaler(),
+                                LinearRegression(copy_X=True))
+        linregr.fit(xtrn, y_train)
+        LINREGR_PREDS = linregr.predict(xvl)
+        print("Removed "+str(i)+" of the least correlated variables")
+        print("LINREGR R2_Score : " + str(r2_score(y_val, LINREGR_PREDS)))
+        #print("Coefficients of the independent variables : " + str(linregr[1].coefs_))
+
+
+
 #correlations = pd.concat([y, x], axis=1).corr()
 
-x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=None, train_size=None)
+
 
 corr0 = df.corr()
 
@@ -191,7 +232,7 @@ def make_corr_heatmap(df, cmap='coolwarm'):
 
     #corr0.style.background_gradient(cmap='coolwarm').set_precision(2)
     plt.clf()
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(18, 18))
 
     heatmap = sns.heatmap(corr0, square=True, vmin=-1.0, vmax=1.0,
                 xticklabels=corr0.columns.values, cmap=cmap,
@@ -199,24 +240,107 @@ def make_corr_heatmap(df, cmap='coolwarm'):
     plt.setp(ax.get_xticklabels(), rotation=45,
              rotation_mode="anchor", ha='right')
     ax.set_title('Correlation Matrix Heatmap')
-    heatmap.tick_params(axis='x', labelsize=6, pad=0.5)
-    heatmap.tick_params(axis='y', labelsize=6)
-    heatmap.figure.savefig("correlation_heatmap_"+cmap+".png", dpi=1000)
+    heatmap.tick_params(axis='x', labelsize=7, pad=0.5)
+    heatmap.tick_params(axis='y', labelsize=7)
+    #heatmap.figure.savefig("correlation_heatmap_"+cmap+".png", dpi=1000)
+    plt.show()
     plt.close(heatmap.figure)
+
+
+def scale(fact, coords):
+    #print(coords)
+    newcoords = [0]*4
+    if len(coords) < 4:
+        return coords
+    newcoords[0] = coords[0][0]
+    newcoords[1] = coords[0][1]+fact
+    newcoords[2] = coords[1][0]
+    newcoords[3] = coords[1][1]
+    #print(newcoords)
+    return newcoords
+
+
+def make_bar(df, key):
+    frequencies = df.loc[:, key].value_counts()
+    x = frequencies.keys()
+    heights = frequencies.values
+    plt.clf()
+    fig, ax = plt.subplots()
+    plt.bar(x, heights, color=colors[random.randint(0, len(colors) - 1)],
+                       edgecolor='black', linewidth=1, tick_label=x, )
+    plt.setp(ax.get_xticklabels(), rotation=45,
+             rotation_mode="anchor", ha='right')
+    if len(x) > 40:
+        plt.setp(ax.get_xticklabels(), fontsize=4)
+    elif len(x) > 25:
+        plt.setp(ax.get_xticklabels(), fontsize=6)
+    plt.ylabel('Frequency')
+    plt.xlabel(key)
+    if True:
+        ax_pos = ax.get_position().get_points()
+        newcoords = [0] * 4
+        newcoords[0] = ax_pos[0][0]
+        newcoords[1] = ax_pos[0][1] + .2
+        newcoords[2] = ax_pos[1][0]
+        newcoords[3] = ax_pos[1][1]
+        ax.set_position(matplotlib.transforms.Bbox.from_extents(newcoords))
+    plt.show()
+
+
+def make_bar_charts(df):
+    keys = set(df.keys())
+    numeric_keys = set(df.select_dtypes(include='number').keys())
+    non_numeric_keys = keys - numeric_keys
+    print(non_numeric_keys)
+    for key in non_numeric_keys:
+        print(key)
+        filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'bar_charts', str(key) + '__bar_chart.jpg')
+        frequencies = df.loc[:, key].value_counts()
+        x = frequencies.keys()
+        if len(x) > 500:
+            continue
+        heights = frequencies.values
+        plt.clf()
+        fig, ax = plt.subplots()
+        #print(key+" : "+str(len(x)))
+        barchart = plt.bar(x, heights, color=colors[random.randint(0, len(colors)-1)],
+                edgecolor='black', linewidth=1, tick_label=x, )
+        plt.setp(ax.get_xticklabels(), rotation=45,
+                 rotation_mode="anchor", ha='right')
+        if len(x) > 40:
+            plt.setp(ax.get_xticklabels(), fontsize=4)
+        elif len(x) > 25:
+            plt.setp(ax.get_xticklabels(), fontsize=6)
+        plt.ylabel('Frequency')
+        plt.xlabel(key)
+        if True:
+            ax_pos = ax.get_position().get_points()
+            #print(ax_pos[0][0], ax_pos[1][0])
+            newcoords = [0]*4
+            newcoords[0] = ax_pos[0][0]
+            newcoords[1] = ax_pos[0][1] + .2
+            newcoords[2] = ax_pos[1][0]
+            newcoords[3] = ax_pos[1][1]
+            #print(newcoords)
+            ax.set_position(matplotlib.transforms.Bbox.from_extents(newcoords))
+        #plt.savefig(filename, dpi=1000, )
+        plt.show()
+
 
 
 def make_scatterplot(df, key1, key2):
     x = df.loc[:, key1]
     y = df.loc[:, key2]
     plt.clf()
-    fig, ax = plt.subplots()
-    plt.scatter(x, y, edgecolors='black', linewidth=0.5, marker='^', c='blue')
-    plt.xlabel(key1)
-    plt.ylabel(key2)
+    fig, ax = plt.subplots(figsize=(15, 15))
+    plt.scatter(x, y, edgecolors='black', linewidth=0.5, marker='^', c=colors[random.randint(0, len(colors)-1)])
+    plt.xlabel(key1, fontsize=15)
+    plt.ylabel(key2, fontsize=15)
     ax.yaxis.set_major_formatter(EngFormatter())
     ax.xaxis.set_major_formatter(EngFormatter())
-    filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'scatterplots', key1+"_vs_"+key2+'.png')
-    plt.savefig(filename, dpi=1000)
+    filename = os.path.join(os.getcwd(), 'casestudy1_figures', 'scatterplots', key1+"_vs_"+key2+'__scatterplot.jpg')
+    #plt.savefig(filename, dpi=1000)
+    plt.show()
     plt.close(fig)
 
 
@@ -231,6 +355,43 @@ def make_scatterplot(df, key1, key2):
 #mlp.fit(x_train, y_train)
 #MLP_PREDS = mlp.predict(x_val)
 #print("MLP R2_Score : "+str(r2_score(y_val, MLP_PREDS)))
+
+def plot_predictions(preds, actuals, title):
+    plt.clf()
+    fig, ax = plt.subplots(figsize=(15, 15))
+    plt.scatter(actuals, actuals, edgecolors='black', linewidth=0.5, marker='o', c='black')
+    plt.scatter(preds, actuals, linewidth=0.5, marker='2', c='red')
+    #plt.xlabel()
+    #plt.ylabel()
+    plt.legend(['Black dots - Actual Data', 'Red tristars - Predictions'], fontsize=15)
+    plt.title(title)
+    ax.yaxis.set_major_formatter(EngFormatter())
+    ax.xaxis.set_major_formatter(EngFormatter())
+    plt.show()
+    plt.close(fig)
+
+
+def mlpregress(layers: tuple): #My final mlpregressor model
+    mlp = make_pipeline(StandardScaler(),
+                        MLPRegressor(activation='relu', random_state=random.randint(111, 999999), alpha=1.5e-4,
+                                     hidden_layer_sizes=layers, max_iter=100000, verbose=False,
+                                     tol=1e-7, learning_rate='adaptive', learning_rate_init=.0005))
+    mlp.fit(xtrn_pruned, y_train)
+    MLP_PREDS = mlp.predict(xval_pruned)
+    print("MLP" + str(layers) + " R2_Score : " + str(r2_score(y_val, MLP_PREDS)))
+    plot_predictions(MLP_PREDS, y_val, 'MLP Regressor Predictions vs Actual Values')
+    #print("Coefficients of the connections : " + str(mlp[1].coefs_))
+    return mlp
+
+
+def linregress():
+    linregr = make_pipeline(StandardScaler(),
+                            LinearRegression(copy_X=True))
+    linregr.fit(xtrn_pruned, y_train)
+    LINREGR_PREDS = linregr.predict(xval_pruned)
+    print("LINREGR R2_Score : " + str(r2_score(y_val, LINREGR_PREDS)))
+    plot_predictions(LINREGR_PREDS, y_val, 'Linear Regressor Predictions vs Actual Values')
+    return linregr
 
 
 def check_layer_sizes(layer_sizes, trials=1):
@@ -254,6 +415,7 @@ def check_layer_sizes(layer_sizes, trials=1):
             mlp.fit(x_train, y_train)
             MLP_PREDS = mlp.predict(x_val)
             print("MLP" + str(sizing) + " R2_Score : " + str(r2_score(y_val, MLP_PREDS)))
+            #print("Coefficients of the connections : "+str(mlp[1].coefs_))
     return
 
 
@@ -264,6 +426,7 @@ def check_linear_regression(trials=1):
         linregr.fit(x_train, y_train)
         LINREGR_PREDS = linregr.predict(x_val)
         print("LINREGR R2_Score : " + str(r2_score(y_val, LINREGR_PREDS)))
+        print("Coefficients of the independent variables : " + str(linregr[1].coef_))
         if trials == 1:
             return linregr
     return
